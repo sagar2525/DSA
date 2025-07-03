@@ -1,0 +1,128 @@
+#include<stdio.h>
+#include<string.h>
+#include<iostream>
+using namespace std;
+
+
+// class account{
+//     public:
+//     float balance = 50000;
+
+// };
+// class work:public account{
+//     public:
+//     float salary = 20000;
+// };
+// class school:public work{
+//     public:
+//     float fees = 10000;
+// };
+// int main(){
+//     school w1;
+
+//     cout<<w1.balance<<endl;
+//     cout<<w1.salary<<endl;
+//     cout<<w1.fees<<endl;
+//     cout<<"Total balance is: "<<w1.balance + w1.salary<<endl;
+//     return 0;
+// }
+
+// class Vehicle{
+//     public:
+//     string make;
+//     string model;
+//     int year;
+//     Vehicle(string m,string mo,int y){
+//         make = m;
+//         model = mo;
+//         year = y;
+//     }
+// };
+// class Car:public Vehicle{
+//     public:
+//     Car(string m,string mo, int y):Vehicle(m,mo,y){}
+//     void display(){
+//         cout<<"Make: "<<make<<endl;
+//         cout<<"Model: "<<model<<endl;
+//         cout<<"Year: "<<year<<endl;  
+//     }
+// };
+// int main(){
+//     Car c1("honda", "civic" , 2015);
+//     c1.display();
+//     return 0;
+// }
+
+// class Person{
+//     public:
+//     string name;
+//     int age;
+//     Person(string n, int a){
+//         name = n;
+//         age = a;
+//     }
+
+// };
+// class Employee:public Person{
+//     public:
+//     int emp_id;
+//     float salary;
+//     Employee(string n, int a ,int id ,float s):Person(n,a),emp_id(id),salary(s){}
+//     void details(){
+//         cout<<"Name: "<<name<<endl;
+//         cout<<"Age: "<<age<<endl;
+//         cout<<"Employee ID: "<<emp_id<<endl;
+//         cout<<"Salary: "<<salary<<endl;
+//     }
+
+// };
+// int main(){
+//     Employee e1("sagar",20,101,20000);
+//     e1.details();
+//     return 0;
+// }
+
+class Shape{
+    public:
+    virtual void display(){
+        cout<<"This is a shape"<<endl;
+    }
+    float area;
+};
+class Circle:public Shape{
+    protected:
+    double radius;
+    public:
+   
+    Circle(double r):radius(r){}
+    double area(){
+        return 3.14 * radius * radius;
+    }
+    void display(){
+        cout<<"circle with radius"<<radius<<endl;
+        cout<<"Area of circle is: "<<area()<<endl;
+    }
+   
+};
+class Cylinder : public Circle {
+    double height;
+public:
+    Cylinder(double r, double h) : Circle(r), height(h) {}
+    double volume() {
+        return area() * height;
+    }
+    void display() override {
+        cout << "Cylinder with radius: " << radius << " and height: " << height << endl;
+        cout << "Volume: " << volume() << endl;
+    }
+};
+
+int main() {
+    Circle c(5.0);
+    c.display();
+
+    Cylinder cyl(5.0, 10.0);
+    cyl.display();
+
+    return 0;
+}
