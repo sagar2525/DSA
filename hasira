@@ -1,0 +1,207 @@
+#include <bits/stdc++.h>
+
+#if __has_include("json.hpp")
+#include "json.hpp"
+#else
+#error "json.hpp not found. Please place nlohmann/json single-header json.hpp in the same directory as main.cpp."
+#endif
+
+using json = nlohmann::json;
+using namespace std;
+
+struct Root {
+    long long x;       // x-coordinate (as integer)
+    long double y;     // y-coordinate decoded (can be very large)
+};
+
+// Convert a digit character to its numeric value; supports 0-9, a-z, A-Z.
+static inline int charToVal(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'z') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'Z') return 10 + (c - 'A');
+    return -1;
+}
+
+// Decode a string s given in base `base` to a signed long double value.
+// Still validates base and digits, but does not overflow on int64.
+// Note: precision for very large values will be limited by long double.
+long double decodeInBase(const string& sRaw, int base) {
+    if (base < 2 || base > 36) {
+        throw runtime_error("Invalid base: " + to_string(base) + ". Expected 2..36.");
+    }
+
+    // Trim spaces
+    auto trim = [](const string& t) {
+        size_t i = 0, j = t.size();
+        while (i < j && isspace(static_cast<unsigned char>(t[i]))) ++i;
+        while (j > i && isspace(static_cast<unsigned char>(t[j - 1]))) --j;
+        return t.substr(i, j - i);
+    };
+
+    string s = trim(sRaw);
+    if (s.empty()) throw runtime_error("Empty value string for base conversion");
+
+    bool neg = false;
+    size_t pos = 0;
+    if (s[0] == '+' || s[0] == '-') {
+        neg = (s[0] == '-');
+        pos = 1;
+        if (pos == s.size()) throw runtime_error("Sign without digits in value: '" + s + "'");
+    }
+
+    // Parse magnitude using long double accumulation to avoid integer overflow.
+    long double acc = 0.0L;
+
+    for (; pos < s.size(); ++pos) {
+        char c = s[pos];
+        if (c == '_') continue; // allow visual separators
+        int v = charToVal(c);
+        if (v < 0 || v >= base) {
+            throw runtime_error("Invalid digit '" + string(1, c) + "' for base " + to_string(base));
+        }
+        acc = acc * static_cast<long double>(base) + static_cast<long double>(v);
+    }
+
+    if (neg) acc = -acc;
+    return acc;
+}
+
+// Read and parse input.json into a vector of roots and extract n, k.
+void parseInput(const string& filename, vector<Root>& rootsOut, int& n, int& k) {
+    ifstream in(filename);
+    if (!in) {
+        throw runtime_error("Failed to open '" + filename + "'. Ensure it exists in the same directory.");
+    }
+
+    json j;
+    try {
+        in >> j;
+    } catch (const std::exception& e) {
+        throw runtime_error(string("Invalid JSON: ") + e.what());
+    }
+
+    if (!j.contains("keys") || !j["keys"].is_object()) {
+        throw runtime_error("JSON missing required 'keys' object");
+    }
+
+    try {
+        n = j["keys"].at("n").get<int>();
+        k = j["keys"].at("k").get<int>();
+    } catch (const std::exception&) {
+        throw runtime_error("'keys' must contain integer fields 'n' and 'k'");
+    }
+
+    // Collect root entries: any top-level key other than "keys" should be an object with base & value
+    vector<Root> roots;
+    roots.reserve(j.size());
+    for (auto it = j.begin(); it != j.end(); ++it) {
+        const string key = it.key();
+        if (key == "keys") continue;
+        if (!it.value().is_object()) {
+            throw runtime_error("Entry '" + key + "' must be an object with 'base' and 'value'");
+        }
+        long long x;
+        try {
+            size_t idx = 0;
+            x = stoll(key, &idx, 10);
+            if (idx != key.size()) throw runtime_error("Trailing chars in x");
+        } catch (const std::exception&) {
+            throw runtime_error("Top-level key '" + key + "' is not a valid integer x");
+        }
+
+        string baseStr, valStr;
+        try {
+            baseStr = it.value().at("base").get<string>();
+            valStr  = it.value().at("value").get<string>();
+        } catch (const std::exception&) {
+            throw runtime_error("Entry for x=" + to_string(x) + " must contain string fields 'base' and 'value'");
+        }
+
+        int base;
+        try {
+            base = stoi(baseStr);
+        } catch (const std::exception&) {
+            throw runtime_error("Base for x=" + to_string(x) + " is not a valid integer: '" + baseStr + "'");
+        }
+
+    long double y = decodeInBase(valStr, base);
+        roots.push_back({x, y});
+    }
+
+    if (static_cast<int>(roots.size()) != n) {
+        throw runtime_error("keys.n = " + to_string(n) + ", but provided roots = " + to_string(roots.size()));
+    }
+    if (k <= 0) {
+        throw runtime_error("keys.k must be positive");
+    }
+    if (k > n) {
+        throw runtime_error("keys.k (" + to_string(k) + ") cannot exceed keys.n (" + to_string(n) + ")");
+    }
+
+    // Sort by x to make the selection of the "first k" deterministic
+    sort(roots.begin(), roots.end(), [](const Root& a, const Root& b){ return a.x < b.x; });
+
+    // Check for duplicate x values
+    for (size_t i = 1; i < roots.size(); ++i) {
+        if (roots[i].x == roots[i-1].x) {
+            throw runtime_error("Duplicate x value detected: " + to_string(roots[i].x));
+        }
+    }
+
+    rootsOut.assign(roots.begin(), roots.begin() + k);
+}
+
+// Compute P(0) using Lagrange interpolation from the selected roots.
+// Uses long double throughout, then rounds to nearest integer for printing.
+long double lagrangeAtZero(const vector<Root>& roots) {
+    const int k = static_cast<int>(roots.size());
+    long double result = 0.0L;
+
+    for (int i = 0; i < k; ++i) {
+        long double xi = static_cast<long double>(roots[i].x);
+    long double yi = roots[i].y;
+        long double li = 1.0L;
+
+        for (int j = 0; j < k; ++j) {
+            if (i == j) continue;
+            long double xj = static_cast<long double>(roots[j].x);
+            long double denom = (xi - xj);
+            if (fabsl(denom) < 1e-18L) {
+                throw runtime_error("Duplicate x values lead to division by zero in interpolation");
+            }
+            li *= (-xj) / denom; // (0 - xj) / (xi - xj)
+        }
+        result += yi * li;
+    }
+
+    return result;
+}
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    try {
+        vector<Root> rootsK;
+        int n = 0, k = 0;
+        parseInput("input.json", rootsK, n, k);
+
+        long double Cres = lagrangeAtZero(rootsK);
+        // Prefer integer output. If within int64 range, print as integer; else print rounded long double.
+        long double roundedLD = floor(Cres + 0.5L);
+        if (roundedLD >= static_cast<long double>(std::numeric_limits<long long>::min()) &&
+            roundedLD <= static_cast<long double>(std::numeric_limits<long long>::max())) {
+            long long C = static_cast<long long>(llround(Cres));
+            cout << "Constant C = " << C << "\n";
+        } else {
+            // Fallback for very large values
+            std::cout.setf(std::ios::fixed);
+            std::cout << std::setprecision(0);
+            cout << "Constant C = " << Cres << "\n";
+        }
+    } catch (const std::exception& e) {
+        cerr << "Error: " << e.what() << "\n";
+        return 1;
+    }
+    return 0;
+}
